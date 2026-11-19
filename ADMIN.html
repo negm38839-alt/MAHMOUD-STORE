@@ -1,0 +1,319 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAHMOUD STORE - Admin</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    font-family: Arial;
+}
+
+body {
+    background: #eef1f5;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 750px;
+    margin: auto;
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+}
+
+h1 {
+    text-align: center;
+    color: #ff9900;
+    background: #131921;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+h2 {
+    color: #232f3e;
+}
+
+input, select {
+    width: 100%;
+    padding: 13px;
+    margin: 8px 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+button {
+    padding: 12px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.add {
+    width: 100%;
+    background: #ff9900;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+.product {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    margin-top: 12px;
+    border-radius: 8px;
+}
+
+.product img {
+    width: 85px;
+    height: 85px;
+    object-fit: contain;
+}
+
+.details {
+    flex: 1;
+}
+
+.delete {
+    background: #e53935;
+    color: white;
+}
+
+#preview {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    display: none;
+    margin: 10px auto;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>MAHMOUD STORE</h1>
+
+<h2>Admin Dashboard</h2>
+
+<h3>Add New Product</h3>
+
+<input id="name" placeholder="Product Name">
+
+<input id="price" type="number" placeholder="Product Price">
+
+<select id="category">
+    <option value="Electronics">Electronics</option>
+    <option value="Clothes">Clothes</option>
+    <option value="Watches">Watches</option>
+    <option value="Tools">Tools</option>
+</select>
+
+<input type="file" id="image" accept="image/*">
+
+<img id="preview" alt="Image Preview">
+
+<button class="add" onclick="addProduct()">
+    + Add Product
+</button>
+
+<hr>
+
+<h2>My Products</h2>
+
+<div id="products"></div>
+
+</div>
+
+<script>
+
+// Open IndexedDB
+let db;
+
+let request = indexedDB.open("MahmoudStoreDB", 1);
+
+request.onupgradeneeded = function(event) {
+    db = event.target.result;
+
+    if (!db.objectStoreNames.contains("images")) {
+        db.createObjectStore("images");
+    }
+};
+
+request.onsuccess = function(event) {
+    db = event.target.result;
+    displayProducts();
+};
+
+request.onerror = function() {
+    alert("Database error!");
+};
+
+// Load products
+let products = JSON.parse(
+    localStorage.getItem("myProducts") || "[]"
+);
+
+function saveProducts() {
+    localStorage.setItem(
+        "myProducts",
+        JSON.stringify(products)
+    );
+}
+
+// Image preview
+document.getElementById("image").addEventListener("change", function() {
+
+    let file = this.files[0];
+
+    if (file) {
+        let preview = document.getElementById("preview");
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = "block";
+    }
+
+});
+
+// Add product
+async function addProduct() {
+
+    let name = document.getElementById("name").value.trim();
+    let price = Number(document.getElementById("price").value);
+    let category = document.getElementById("category").value;
+    let imageFile = document.getElementById("image").files[0];
+
+    if (name === "" || price <= 0 || !imageFile) {
+        alert("Please fill all fields and choose an image!");
+        return;
+    }
+
+    try {
+
+        let id = Date.now();
+
+        let transaction = db.transaction(["images"], "readwrite");
+        let store = transaction.objectStore("images");
+
+        store.put(imageFile, id);
+
+        await new Promise((resolve, reject) => {
+            transaction.oncomplete = resolve;
+            transaction.onerror = reject;
+        });
+
+        products.push({
+            id: id,
+            name: name,
+            price: price,
+            category: category
+        });
+
+        saveProducts();
+
+        displayProducts();
+
+        document.getElementById("name").value = "";
+        document.getElementById("price").value = "";
+        document.getElementById("image").value = "";
+
+        document.getElementById("preview").style.display = "none";
+
+        alert("Product added successfully!");
+
+    } catch (error) {
+        alert("Could not save the product image.");
+    }
+}
+
+// Display products
+function displayProducts() {
+
+    if (!db) return;
+
+    let box = document.getElementById("products");
+    box.innerHTML = "";
+
+    if (products.length === 0) {
+        box.innerHTML = "No products yet.";
+        return;
+    }
+
+    products.forEach(function(p) {
+
+        let item = document.createElement("div");
+        item.className = "product";
+
+        let img = document.createElement("img");
+
+        let details = document.createElement("div");
+        details.className = "details";
+
+        let title = document.createElement("h3");
+        title.textContent = p.name;
+
+        let price = document.createElement("p");
+        price.textContent = p.price + " EGP";
+
+        let category = document.createElement("p");
+        category.textContent = p.category;
+
+        let deleteButton = document.createElement("button");
+        deleteButton.className = "delete";
+        deleteButton.textContent = "Delete";
+
+        deleteButton.onclick = function() {
+            deleteProduct(p.id);
+        };
+
+        let transaction = db.transaction(["images"], "readonly");
+        let store = transaction.objectStore("images");
+        let getImage = store.get(p.id);
+
+        getImage.onsuccess = function() {
+            if (getImage.result) {
+                img.src = URL.createObjectURL(getImage.result);
+            }
+        };
+
+        details.appendChild(title);
+        details.appendChild(price);
+        details.appendChild(category);
+
+        item.appendChild(img);
+        item.appendChild(details);
+        item.appendChild(deleteButton);
+
+        box.appendChild(item);
+
+    });
+}
+
+// Delete product
+function deleteProduct(id) {
+
+    products = products.filter(function(p) {
+        return p.id !== id;
+    });
+
+    saveProducts();
+
+    let transaction = db.transaction(["images"], "readwrite");
+    transaction.objectStore("images").delete(id);
+
+    transaction.oncomplete = function() {
+        displayProducts();
+    };
+}
+
+</script>
+
+</body>
+</html>
+```
